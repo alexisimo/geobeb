@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>{% block title %}{% endblock %} - GeoBEB</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    {% block head %}
+    {% endblock %}
+</head>
+<body>
+    <nav>
+      <h1>GeoBEB</h1>
+      <ul>
+        <li><span>Welcome!</span></li>
+      </ul>
+    </nav>
+    {% block body %}
+    <div id="content">{% block content %}{% endblock %}</div>
+    <div id="footer">
+        {% block footer %}
+        &copy; Copyright 2008 by <a href="http://domain.invalid/">you</a>.
+        {% endblock %}
+    </div>
+    {% endblock %}
+</body>
+</html>

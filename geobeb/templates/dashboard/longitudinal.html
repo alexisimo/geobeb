@@ -1,0 +1,261 @@
+{% extends 'base.html' %}
+
+{% block head %}
+<!--  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">-->
+<!--  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">-->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"></script>
+
+  <link rel="stylesheet" href="https://openlayers.org/en/v4.6.5/css/ol.css" type="text/css">
+  <!-- The line below is only needed for old environments like Internet Explorer and Android 4.x -->
+  <script src="https://cdn.polyfill.io/v2/polyfill.min.js?features=requestAnimationFrame,Element.prototype.classList,URL"></script>
+  <script src="https://openlayers.org/en/v4.6.5/build/ol.js"></script>
+  <script>
+    var raster;
+    var source;
+    var vector;
+    var map;
+    var typeSelect;
+    var draw;
+    var features = new ol.Collection();
+    var format = new ol.format.WKT();
+    var current_shape = "point";
+
+    var fill = new ol.style.Fill({
+      color: 'rgba(210, 122, 167,0.2)'
+    });
+    var stroke = new ol.style.Stroke({
+      color: '#B40404',
+      width: 2
+    });
+
+    var styles = [
+      new ol.style.Style({
+        image: new ol.style.Circle({
+          fill: fill,
+          stroke: stroke,
+          radius: 5
+        }),
+        fill: fill,
+        stroke: stroke
+      })
+    ];
+
+    function addInteraction(shape) {
+      draw = new ol.interaction.Draw({
+        features: features,
+        type: /** @type {ol.geom.GeometryType} */ shape
+      });
+      map.addInteraction(draw);
+    }
+
+    /**
+    * Let user change the geometry type.
+    * @param {Event} e Change event.
+    */
+    function createVector() {
+      vector = new ol.layer.Vector({
+        source: new ol.source.Vector({ features: features }),
+        style: styles
+      });
+    }
+
+    function toEPSG4326(element, index, array) {
+      element = element.getGeometry().transform('EPSG:3857', 'EPSG:4326');
+    }
+
+    function toEPSG3857(element, index, array) {
+      element = element.getGeometry().transform('EPSG:4326', 'EPSG:3857');
+    }
+
+    function selectGeom(shape) {
+      current_shape = shape;
+      map.removeInteraction(draw);
+      addInteraction(shape);
+    }
+
+    function init() {
+      // document.getElementById("missing_wkt").style.display = "block";
+      createVector();
+      raster = new ol.layer.Tile({
+        source: new ol.source.OSM()
+      });
+
+      features.on("add", function (e) {
+        restoreDefaultColors();
+        features.forEach(toEPSG4326);
+        document.getElementById('wktStringTextArea').value = format.writeFeatures(features.getArray(), { rightHanded: true });
+        features.forEach(toEPSG3857);
+      });
+
+      map = new ol.Map({
+        layers: [raster, vector],
+        target: 'map',
+        view: new ol.View({
+          center: [240000, 5070000],
+          zoom: 11
+        })
+      });
+      if (window.location && window.location.hash) {
+        loadWKTfromURIFragment(window.location.hash);
+      }
+      plotWKT();
+      selectGeom('Polygon');
+    }
+
+    function restoreDefaultColors() {
+      document.getElementById("wktStringTextArea").style.borderColor = "";
+      document.getElementById("wktStringTextArea").style.backgroundColor = "";
+    };
+
+    // Plot wkt string on map
+    function plotWKT() {
+      var new_feature;
+
+      wkt_string = document.getElementById("wktStringTextArea").value;
+      if (wkt_string == "") {
+        document.getElementById("wktStringTextArea").style.borderColor = "red";
+        document.getElementById("wktStringTextArea").style.backgroundColor = "#F7E8F3";
+        return;
+      } else {
+        try {
+          new_feature = format.readFeature(wkt_string);
+        } catch (err) {
+        }
+      }
+
+      if (!new_feature) {
+        document.getElementById("wktStringTextArea").style.borderColor = "red";
+        document.getElementById("wktStringTextArea").style.backgroundColor = "#F7E8F3";
+        return;
+      } else {
+        map.removeLayer(vector);
+        features.clear();
+        new_feature.getGeometry().transform('EPSG:4326', 'EPSG:3857');
+        features.push(new_feature);
+      }
+      vector = new ol.layer.Vector({
+        source: new ol.source.Vector({ features: features }),
+        style: styles
+      });
+
+      selectGeom(current_shape);
+      map.addLayer(vector);
+      derived_feature = features.getArray()[0];
+      extent = derived_feature.getGeometry().getExtent();
+      minx = derived_feature.getGeometry().getExtent()[0];
+      miny = derived_feature.getGeometry().getExtent()[1];
+      maxx = derived_feature.getGeometry().getExtent()[2];
+      maxy = derived_feature.getGeometry().getExtent()[3];
+      centerx = (minx + maxx) / 2;
+      centery = (miny + maxy) / 2;
+      map.setView(new ol.View({
+        center: [centerx, centery],
+        zoom: 8
+      }));
+      map.getView().fit(extent, map.getSize());
+    }
+
+    function clearMap() {
+      map.removeLayer(vector);
+      features.clear();
+      vector = new ol.layer.Vector({
+        source: new ol.source.Vector({ features: features }),
+        style: styles
+      });
+      selectGeom(current_shape);
+      map.addLayer(vector);
+      document.getElementById("wktStringTextArea").value = "";
+      restoreDefaultColors();
+    }
+
+    function loadWKTfromURIFragment(fragment) {
+      // remove first character from fragment as it contains '#'
+      var wkt = window.location.hash.slice(1);
+      document.getElementById("wktStringTextArea").value = decodeURI(wkt);
+    }
+  </script>
+  <!-- Place this tag in your head or just before your close body tag. -->
+  <script async defer src="https://buttons.github.io/buttons.js"></script>
+  <style>
+	@media only screen and (min-width: 1366px) {
+	  .map { height: 400px !important}
+	}
+	@media only screen and (min-width: 1440px) {
+	  .map { height: 500px !important}
+	}
+	@media only screen and (min-width: 1680px) {
+	  .map { height: 650px !important}
+	}
+	@media only screen and (min-width: 1920px) {
+	  .map { height: 700px !important}
+	}
+	@media only screen and (min-width: 2560px) {
+	  .map { height: 1050px !important}
+	}
+  </style>
+{% endblock %}
+
+{% block body %}
+<h1>{% block title %}Longitudinal Energy Benchmarking{% endblock %}</h1>
+
+<section style="position:absolute;top:0%;right:-3%;width:50%;height:0%">
+<img onload="init()" src="https://www.bigg-project.eu/wp-content/uploads/2021/02/Logo-BIGG-Color@2x-300x150.png" alt="Logo"
+                class="responsive" style="margin-left: 10%;">
+</section>
+
+<section style="position:absolute;top:20%;right:15%;width:30%;height:40%">
+  <div class="container-fluid" style="padding: 0px; border:0px" >
+    <div class="span12">
+      <div id="overlay" class="row align-items-center justify-content-center" style="background-color: transparent; z-index:1; position: absolute; top:280px; right:26px">
+        <div class="btn-group-vertical ">
+<!--          <button type="button" class="btn btn-primary" onclick="selectGeom('Point')">Point</button>-->
+<!--          <button type="button" class="btn btn-primary" onclick="selectGeom('LineString')">Line String</button>-->
+<!--          <button type="button" class="btn btn-primary" onclick="selectGeom('Polygon')">Polygon</button>-->
+        </div>
+      </div>
+      <div id="map" class="map" style="z-index: 0"></div>
+    </div>
+    <div class="span12" style="padding: 0px; border:0px">
+      <form method="post">
+      <textarea name="wktStringTextArea" id="wktStringTextArea" style="display:none" class="form-control" rows="4" onclick="restoreDefaultColors()">
+        {{ request.form['wktStringTextArea'] or wkt }} POLYGON((2.1701109084663988 41.385534418977755,2.171666589695037 41.38301886727217,2.174026933628142
+          41.38030196212546,2.175467279888924 41.37867176460654,2.17768010230103 41.37571315357127,2.177894679022221
+          41.37596474138101,2.178203133058934 41.37597480487318,2.182253268647041 41.38126798591341,2.1727582488248496
+          41.388452337008545,2.1701109084663988 41.385534418977755))
+      </textarea>
+      <div class="btn-group btn-group-md" style="padding: 10px; position: absolute; right:0px">
+        <select class="form-select" id="year" name="year" disabled="true" >
+          <option value="">year</option>
+          <option value="2013">2013</option>
+          <option value="2014">2014</option>
+          <option value="2015">2015</option>
+          <option value="2016">2016</option>
+          <option value="2017">2017</option>
+          <option value="2018">2018</option>
+          <option value="2019">2019</option>
+          <option value="2020">2020</option>
+          <option value="2021">2021</option>
+          <option value="2022">2022</option>
+        </select>
+        <button type="button" class="btn btn-primary" onclick="clearMap()">Clear</button>
+        <input type="submit" value="Launch Query" onclick="plotWKT()">
+      </div>
+      </form>
+    </div>
+  </div>
+</section>
+
+{% block content %}
+<section class="content" style="position:absolute;top:20%;left:14%;width:35%;height:100%" >
+  {% for message in get_flashed_messages() %}
+    <div class="flash">{{ message }}</div>
+  {% endfor %}
+
+  <img style="width:100%;height:50%;" src='data:image/png;base64,{{fig}}'/>
+  <p style="padding: 10px;background-color:white;text-align:right"><span style="float:left"><b>Years: {{year}}</b></span> Time elapsed: {{took}} s </p>
+</section>
+{% endblock %}
+
+{% endblock %}
